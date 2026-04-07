@@ -465,7 +465,7 @@ function endSpin(){
     bal+=w;lw=w;hist.unshift(key);if(hist.length>30)hist.pop();
     const co=COL[key],disp=key==='CANADA'?'🍁':key==='JOKER'?'JOKER':'$'+key;
     showRes(disp,co.glow,w);
-    if(w>0){sfxW(key==='JOKER'||key==='CANADA'||key==='24');const el=document.querySelector(`.bill[data-b="${key}"]`);if(el){el.classList.add('winner');setTimeout(()=>el.classList.remove('winner'),2200)}}
+    if(w>0){sfxW(key==='JOKER'||key==='CANADA'||key==='25');const el=document.querySelector(`.bill[data-b="${key}"]`);if(el){el.classList.add('winner');setTimeout(()=>el.classList.remove('winner'),2200)}}
     ui();renderHist();
 }
 
