@@ -94,14 +94,18 @@ body{display:flex;flex-direction:column;height:100vh;height:100dvh}
 
 /* Lever area */
 #lever-area{width:clamp(58px,9vw,80px);background:linear-gradient(180deg,#3a3028,#2a2018 50%,#1a1008);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:6px 4px;gap:3px;border-left:2px solid #5a4a2a}
-#lever-wrap{display:flex;flex-direction:column;align-items:center;cursor:pointer;transition:transform .3s cubic-bezier(.4,0,.2,1);transform-origin:bottom center}
-#lever-wrap.pulled{transform:rotate(25deg)}
+#lever-wrap{display:flex;flex-direction:column;align-items:center;cursor:grab;transform-origin:bottom center}
+#lever-wrap:active{cursor:grabbing}
 .lb{width:clamp(26px,4.5vw,36px);height:clamp(26px,4.5vw,36px);background:radial-gradient(circle at 38% 32%,#ff5555,#cc0000,#880000);border-radius:50%;border:2px solid #990000;box-shadow:0 3px 10px rgba(0,0,0,.6),inset 0 -3px 6px rgba(0,0,0,.3),inset 0 2px 4px rgba(255,150,150,.3)}
 .ls{width:clamp(6px,1vw,9px);height:clamp(55px,10vh,90px);background:linear-gradient(90deg,#888,#ccc 30%,#eee 50%,#ccc 70%,#888);border-radius:4px;margin-top:-2px;box-shadow:2px 0 6px rgba(0,0,0,.3)}
 .lbs{width:clamp(28px,5vw,40px);height:clamp(12px,2vh,18px);background:linear-gradient(180deg,#999,#555);border-radius:0 0 6px 6px;margin-top:-1px;box-shadow:0 3px 6px rgba(0,0,0,.4)}
 .la{font-size:clamp(8px,1.5vw,13px);color:#ffd700;animation:bnc .8s ease infinite}
 @keyframes bnc{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
 .ll{font-size:clamp(6px,1.1vw,9px);color:#c8a050;font-weight:900;letter-spacing:2px}
+
+/* Fullscreen button */
+#fs-btn{position:absolute;top:6px;right:6px;z-index:15;width:32px;height:32px;border-radius:6px;background:rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.2);color:#ffd700;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;backdrop-filter:blur(4px)}
+#fs-btn:hover{background:rgba(255,215,0,.2);border-color:#ffd700}
 
 /* Bottom bar */
 #bottom-bar{display:flex;align-items:center;gap:4px;background:#1a1008;padding:3px 6px;border-top:2px solid #4a3a1a;flex-shrink:0;flex-wrap:wrap;justify-content:center}
@@ -121,6 +125,7 @@ body{display:flex;flex-direction:column;height:100vh;height:100dvh}
 <body>
 
 <div id="wheel-area">
+    <button id="fs-btn" onclick="toggleFS()" title="Fullscreen">⛶</button>
     <div id="wheel-wrap"><canvas id="wc"></canvas><div id="ptr"><div class="pa" id="flapper"></div><div class="pd"></div></div></div>
     <div id="res-over"><div id="res-txt"></div><div id="res-sub"></div></div>
 </div>
@@ -196,7 +201,7 @@ body{display:flex;flex-direction:column;height:100vh;height:100dvh}
         </div>
 
         <div id="lever-area">
-            <div id="lever-wrap" onclick="pullLever()"><div class="lb"></div><div class="ls"></div></div>
+            <div id="lever-wrap"><div class="lb"></div><div class="ls"></div></div>
             <div class="lbs"></div>
             <div class="la">⬇</div>
             <div class="ll">PULL</div>
@@ -270,10 +275,60 @@ const KEYS=Object.keys(PAY);
 let bal=1000,bets={},prev={},chip=1,spin_=false,rot=0,hist=[],lw=0;
 KEYS.forEach(k=>bets[k]=0);
 
-// Audio
+// Audio — richer mechanical sounds
 let ac=null;
 function ga(){if(!ac)ac=new(window.AudioContext||window.webkitAudioContext)();return ac}
-function sfxT(){try{const c=ga(),o=c.createOscillator(),g=c.createGain();o.connect(g);g.connect(c.destination);o.type='triangle';o.frequency.value=1100+Math.random()*500;g.gain.setValueAtTime(.06,c.currentTime);g.gain.exponentialRampToValueAtTime(.001,c.currentTime+.03);o.start(c.currentTime);o.stop(c.currentTime+.03)}catch(e){}}
+
+// Mechanical peg click: sharp attack + bass thud + filtered noise burst
+function sfxT(){
+    try{
+        const c=ga(),t=c.currentTime;
+        // Sharp click
+        const o1=c.createOscillator(),g1=c.createGain();
+        o1.connect(g1);g1.connect(c.destination);
+        o1.type='square';o1.frequency.value=900+Math.random()*600;
+        g1.gain.setValueAtTime(.07,t);g1.gain.exponentialRampToValueAtTime(.001,t+.02);
+        o1.start(t);o1.stop(t+.02);
+        // Bass thud
+        const o2=c.createOscillator(),g2=c.createGain();
+        o2.connect(g2);g2.connect(c.destination);
+        o2.type='sine';o2.frequency.value=180+Math.random()*80;
+        g2.gain.setValueAtTime(.04,t);g2.gain.exponentialRampToValueAtTime(.001,t+.035);
+        o2.start(t);o2.stop(t+.035);
+        // Noise burst for mechanical texture
+        const buf=c.createBuffer(1,c.sampleRate*.015|0,c.sampleRate);
+        const d=buf.getChannelData(0);
+        for(let i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*Math.exp(-i/(d.length*.15));
+        const ns=c.createBufferSource();ns.buffer=buf;
+        const nf=c.createBiquadFilter();nf.type='bandpass';nf.frequency.value=3500;nf.Q.value=2;
+        const ng=c.createGain();
+        ns.connect(nf);nf.connect(ng);ng.connect(c.destination);
+        ng.gain.setValueAtTime(.035,t);ng.gain.exponentialRampToValueAtTime(.001,t+.015);
+        ns.start(t);
+    }catch(e){}
+}
+
+// Lever pull sound — descending mechanical grind
+function sfxPull(){
+    try{const c=ga(),t=c.currentTime;
+    const o=c.createOscillator(),g=c.createGain();
+    o.connect(g);g.connect(c.destination);o.type='sawtooth';
+    o.frequency.setValueAtTime(280,t);o.frequency.linearRampToValueAtTime(90,t+.18);
+    g.gain.setValueAtTime(.05,t);g.gain.exponentialRampToValueAtTime(.001,t+.2);
+    o.start(t);o.stop(t+.2);}catch(e){}
+}
+
+// Lever spring-back sound — ascending twang
+function sfxSpring(){
+    try{const c=ga(),t=c.currentTime;
+    const o=c.createOscillator(),g=c.createGain();
+    o.connect(g);g.connect(c.destination);o.type='sine';
+    o.frequency.setValueAtTime(100,t);o.frequency.exponentialRampToValueAtTime(700,t+.08);
+    g.gain.setValueAtTime(.04,t);g.gain.exponentialRampToValueAtTime(.001,t+.12);
+    o.start(t);o.stop(t+.12);}catch(e){}
+}
+
+// Win chime
 function sfxW(big){try{const c=ga(),nn=big?[523,659,784,1047]:[523,659,784];nn.forEach((f,i)=>{const o=c.createOscillator(),g=c.createGain();o.connect(g);g.connect(c.destination);o.type='sine';o.frequency.value=f;const t=c.currentTime+i*.12;g.gain.setValueAtTime(.12,t);g.gain.exponentialRampToValueAtTime(.001,t+.4);o.start(t);o.stop(t+.4)})}catch(e){}}
 
 // Canvas
@@ -459,7 +514,7 @@ function animF(ts){
 }
 
 function endSpin(){
-    spin_=false;document.getElementById('lever-wrap').classList.remove('pulled');
+    spin_=false;
     const res=LAYOUT[tI],key=String(res),ba=bets[key]||0;
     let w=0;if(ba>0)w=ba+ba*PAY[key];
     bal+=w;lw=w;hist.unshift(key);if(hist.length>30)hist.pop();
@@ -469,7 +524,57 @@ function endSpin(){
     ui();renderHist();
 }
 
-function pullLever(){if(spin_)return;const tb=totalBet();if(tb===0||tb>bal)return;document.getElementById('lever-wrap').classList.add('pulled');setTimeout(doSpin,350)}
+// ---- Lever drag mechanics ----
+let lvDrag=false,lvStartY=0,lvAng=0;
+const lvEl=document.getElementById('lever-wrap');
+
+function lvDown(e){
+    if(spin_)return;
+    e.preventDefault();
+    if(ac&&ac.state==='suspended')ac.resume();
+    lvDrag=true;
+    lvStartY=(e.touches?e.touches[0].clientY:e.clientY);
+    lvEl.style.transition='none';
+}
+function lvMove(e){
+    if(!lvDrag)return;
+    const y=(e.touches?e.touches[0].clientY:e.clientY);
+    const dy=y-lvStartY;
+    lvAng=Math.max(0,Math.min(50,dy*.6));
+    lvEl.style.transform=`rotate(${lvAng}deg)`;
+    // Creak sound at thresholds
+    if(lvAng>5&&lvAng<8)sfxPull();
+}
+function lvUp(){
+    if(!lvDrag)return;
+    lvDrag=false;
+    const pulled=lvAng>28;
+    // Spring back
+    lvEl.style.transition='transform .25s cubic-bezier(.2,.8,.3,1.2)';
+    lvEl.style.transform='rotate(0deg)';
+    sfxSpring();
+    setTimeout(()=>{lvEl.style.transition='none'},260);
+    if(pulled){
+        const tb=totalBet();
+        if(tb>0&&tb<=bal)doSpin();
+    }
+    lvAng=0;
+}
+lvEl.addEventListener('mousedown',lvDown);
+lvEl.addEventListener('touchstart',lvDown,{passive:false});
+document.addEventListener('mousemove',lvMove);
+document.addEventListener('touchmove',lvMove,{passive:true});
+document.addEventListener('mouseup',lvUp);
+document.addEventListener('touchend',lvUp);
+
+// Fullscreen
+function toggleFS(){
+    if(!document.fullscreenElement&&!document.webkitFullscreenElement){
+        (document.documentElement.requestFullscreen||document.documentElement.webkitRequestFullscreen).call(document.documentElement);
+    }else{
+        (document.exitFullscreen||document.webkitExitFullscreen).call(document);
+    }
+}
 
 // ---- UI ----
 function totalBet(){return KEYS.reduce((s,k)=>s+bets[k],0)}
@@ -514,7 +619,23 @@ document.querySelectorAll('.cc').forEach(el=>{el.addEventListener('click',()=>{c
 document.getElementById('clr-btn').addEventListener('click',clearBets);
 document.getElementById('rep-btn').addEventListener('click',replay);
 document.getElementById('rules-btn').addEventListener('click',()=>{document.getElementById('rules-modal').style.display='flex'});
-document.addEventListener('keydown',e=>{if(e.code==='Space'&&!spin_){e.preventDefault();pullLever()}});
+document.addEventListener('keydown',e=>{
+    if(e.code==='Space'&&!spin_){
+        e.preventDefault();
+        const tb=totalBet();if(tb===0||tb>bal)return;
+        if(ac&&ac.state==='suspended')ac.resume();
+        lvEl.style.transition='transform .15s ease-in';
+        lvEl.style.transform='rotate(45deg)';
+        sfxPull();
+        setTimeout(()=>{
+            lvEl.style.transition='transform .25s cubic-bezier(.2,.8,.3,1.2)';
+            lvEl.style.transform='rotate(0deg)';
+            sfxSpring();
+            doSpin();
+            setTimeout(()=>{lvEl.style.transition='none'},260);
+        },250);
+    }
+});
 let rTmr;window.addEventListener('resize',()=>{clearTimeout(rTmr);rTmr=setTimeout(()=>{setup();render()},100)});
 
 setup();render();ui();
